@@ -1,7 +1,7 @@
 FROM ubuntu:22.04
 
 RUN apt-get update && \
-    apt-get install -y libxml2 libxslt-dev wget bzip2 gcc && \
+    apt-get install -y build-essential libxml2 libxslt-dev wget bzip2 libgomp1 && \
     rm -rf /var/lib/apt/lists/*
 
 RUN echo 'export PATH=/opt/conda/bin:$PATH' > /etc/profile.d/conda.sh && \
@@ -26,4 +26,9 @@ WORKDIR /home/lightfm
 
 COPY . .
 
-RUN pip install -e .
+RUN pip install . && \
+    cp -r tests /home/tests && \
+    cp -r examples /home/examples && \
+    rm -rf /home/lightfm
+
+WORKDIR /home

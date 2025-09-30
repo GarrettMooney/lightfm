@@ -1,6 +1,11 @@
 *.zip
 *.7z
 *.xml
+*.so
+*.pyc
+__pycache__
+build/
+*.egg-info/
 examples/crossvalidated/*.7z
 examples/crossvalidated/*.xml
 examples/movielens/*.zip
