@@ -1,20 +1,29 @@
-FROM ubuntu:16.04
+FROM ubuntu:22.04
 
-RUN apt-get update
-RUN apt-get install -y libxml2 libxslt-dev wget bzip2 gcc
+RUN apt-get update && \
+    apt-get install -y libxml2 libxslt-dev wget bzip2 gcc && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN echo 'export PATH=/opt/conda/bin:$PATH' > /etc/profile.d/conda.sh && \
-    wget --quiet https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"; \
+    else \
+        MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh"; \
+    fi && \
+    wget --quiet $MINICONDA_URL -O ~/miniconda.sh && \
     /bin/bash ~/miniconda.sh -b -p /opt/conda && \
     rm ~/miniconda.sh
 
-ENV PATH /opt/conda/bin:$PATH
+ENV PATH=/opt/conda/bin:$PATH
 
-RUN conda install pytest jupyter scikit-learn
+RUN conda install -y --override-channels -c conda-forge pytest jupyter scikit-learn && \
+    conda clean -afy
 
-ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONDONTWRITEBYTECODE=1
 
-ADD . /home/lightfm/
-WORKDIR /home/
+WORKDIR /home/lightfm
 
-RUN cd lightfm && pip install -e .
+COPY . .
+
+RUN pip install -e .
