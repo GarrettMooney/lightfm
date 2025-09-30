@@ -5,5 +5,3 @@ services:
     # of the LightFM code.
     # volumes:
     #   - .:/home/lightfm/
-    ports:
-    - "8888:8888"

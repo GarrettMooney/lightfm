@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-docker-compose run lightfm py.test -x tests/
+docker-compose run lightfm pytest -x tests/
