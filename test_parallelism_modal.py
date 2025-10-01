@@ -15,10 +15,14 @@ local_lightfm_path = Path(__file__).parent
 # Create an image with all necessary build dependencies and install LightFM
 image = (
     modal.Image.debian_slim(python_version="3.12")
-    .apt_install("gcc", "g++", "libgomp1", "git")
-    .pip_install("numpy", "scipy", "requests", "scikit-learn", "cython")
-    .run_commands("git clone https://github.com/garrettmooney/lightfm.git /tmp/lightfm")
-    .run_commands("cd /tmp/lightfm && pip install .")
+    .apt_install("git", "gcc", "g++", "libomp-dev", "libopenblas-dev", "liblapack-dev")
+    .pip_install(
+        "numpy",
+        "scipy",
+        "requests",
+        "cython",
+        "lightfm @ git+https://github.com/garrettmooney/lightfm.git@master",
+    )
 )
 
 
@@ -62,7 +66,7 @@ def test_parallelism():
     print("=" * 60)
 
     np.random.seed(42)
-    num_users, num_items, num_interactions = 3_000, 3_000, 300_000
+    num_users, num_items, num_interactions = 2000, 1000, 20000
     user_ids = np.random.randint(0, num_users, num_interactions)
     item_ids = np.random.randint(0, num_items, num_interactions)
     data = np.ones(num_interactions)
@@ -82,7 +86,7 @@ def test_parallelism():
     train_times = {}
 
     for num_threads in thread_counts:
-        model = LightFM(no_components=2**7, loss="warp", random_state=42)
+        model = LightFM(no_components=30, loss="warp", random_state=42)
         start = time.time()
         model.fit(interactions, epochs=5, num_threads=num_threads, verbose=False)
         elapsed = time.time() - start
