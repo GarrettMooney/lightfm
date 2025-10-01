@@ -61,7 +61,7 @@ cdef extern from "stdlib.h" nogil:
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 # ----------------------------------------------------------------------
 
-cdef unsigned int temper(unsigned int x) nogil:
+cdef unsigned int temper(unsigned int x) noexcept nogil:
 
     cdef unsigned int and_1, and_2
 
@@ -76,12 +76,12 @@ cdef unsigned int temper(unsigned int x) nogil:
     return x
 
 
-cdef int rand_r(unsigned int * seed) nogil:
+cdef int rand_r(unsigned int * seed) noexcept nogil:
     seed[0] = seed[0] * 1103515245 + 12345
     return temper(seed[0]) / 2
 
 
-cdef int sample_range(int min_val, int max_val, unsigned int *seed) nogil:
+cdef int sample_range(int min_val, int max_val, unsigned int *seed) noexcept nogil:
 
     cdef int val_range
 
@@ -90,7 +90,7 @@ cdef int sample_range(int min_val, int max_val, unsigned int *seed) nogil:
     return min_val + (rand_r(seed) % val_range)
 
 
-cdef int int_min(int x, int y) nogil:
+cdef int int_min(int x, int y) noexcept nogil:
 
     if x < y:
         return x
@@ -98,7 +98,7 @@ cdef int int_min(int x, int y) nogil:
         return y
 
 
-cdef int int_max(int x, int y) nogil:
+cdef int int_max(int x, int y) noexcept nogil:
 
     if x < y:
         return y
@@ -111,7 +111,7 @@ cdef struct Pair:
     flt val
 
 
-cdef int reverse_pair_compare(const_void *a, const_void *b) nogil noexcept:
+cdef int reverse_pair_compare(const_void *a, const_void *b) noexcept nogil:
 
     cdef flt diff
 
@@ -122,7 +122,7 @@ cdef int reverse_pair_compare(const_void *a, const_void *b) nogil noexcept:
         return -1
 
 
-cdef int int_compare(const_void *a, const_void *b) nogil noexcept:
+cdef int int_compare(const_void *a, const_void *b) noexcept nogil:
 
     if deref(<int*>a) - deref(<int*>b) > 0:
         return 1
@@ -132,7 +132,7 @@ cdef int int_compare(const_void *a, const_void *b) nogil noexcept:
         return 0
 
 
-cdef int flt_compare(const_void *a, const_void *b) nogil noexcept:
+cdef int flt_compare(const_void *a, const_void *b) noexcept nogil:
 
     if deref(<flt*>a) - deref(<flt*>b) > 0:
         return 1
@@ -165,7 +165,7 @@ cdef class CSRMatrix:
         self.rows, self.cols = csr_matrix.shape
         self.nnz = len(self.data)
 
-    cdef int get_row_start(self, int row) nogil:
+    cdef int get_row_start(self, int row) noexcept nogil:
         """
         Return the pointer to the start of the
         data for row.
@@ -173,7 +173,7 @@ cdef class CSRMatrix:
 
         return self.indptr[row]
 
-    cdef int get_row_end(self, int row) nogil:
+    cdef int get_row_end(self, int row) noexcept nogil:
         """
         Return the pointer to the end of the
         data for row.
@@ -259,7 +259,7 @@ cdef class FastLightFM:
         self.max_sampled = max_sampled
 
 
-cdef inline flt sigmoid(flt v) nogil:
+cdef inline flt sigmoid(flt v) noexcept nogil:
     """
     Compute the sigmoid of v.
     """
@@ -267,7 +267,7 @@ cdef inline flt sigmoid(flt v) nogil:
     return 1.0 / (1.0 + exp(-v))
 
 
-cdef inline int in_positives(int item_id, int user_id, CSRMatrix interactions) nogil:
+cdef inline int in_positives(int item_id, int user_id, CSRMatrix interactions) noexcept nogil:
 
     cdef int i, start_idx, stop_idx
 
@@ -290,7 +290,7 @@ cdef inline void compute_representation(CSRMatrix features,
                                         FastLightFM lightfm,
                                         int row_id,
                                         double scale,
-                                        flt *representation) nogil:
+                                        flt *representation) noexcept nogil:
     """
     Compute latent representation for row_id.
     The last element of the representation is the bias.
@@ -319,7 +319,7 @@ cdef inline void compute_representation(CSRMatrix features,
 
 cdef inline flt compute_prediction_from_repr(flt *user_repr,
                                              flt *item_repr,
-                                             int no_components) nogil:
+                                             int no_components) noexcept nogil:
 
     cdef int i
     cdef flt result
@@ -345,7 +345,7 @@ cdef double update_biases(CSRMatrix feature_indices,
                           double learning_rate,
                           double alpha,
                           flt rho,
-                          flt eps) nogil:
+                          flt eps) noexcept nogil:
     """
     Perform a SGD update of the bias terms.
     """
@@ -403,7 +403,7 @@ cdef inline double update_features(CSRMatrix feature_indices,
                                    double learning_rate,
                                    double alpha,
                                    flt rho,
-                                   flt eps) nogil:
+                                   flt eps) noexcept nogil:
     """
     Update feature vectors.
     """
@@ -460,7 +460,7 @@ cdef inline void update(double loss,
                         flt *it_repr,
                         FastLightFM lightfm,
                         double item_alpha,
-                        double user_alpha) nogil:
+                        double user_alpha) noexcept nogil:
     """
     Apply the gradient step.
     """
@@ -545,7 +545,7 @@ cdef void warp_update(double loss,
                       flt *neg_it_repr,
                       FastLightFM lightfm,
                       double item_alpha,
-                      double user_alpha) nogil:
+                      double user_alpha) noexcept nogil:
     """
     Apply the gradient step.
     """
@@ -651,7 +651,7 @@ cdef void warp_update(double loss,
 
 cdef void regularize(FastLightFM lightfm,
                      double item_alpha,
-                     double user_alpha) nogil:
+                     double user_alpha) noexcept nogil:
     """
     Apply accumulated L2 regularization to all features.
     """
@@ -677,7 +677,7 @@ cdef void regularize(FastLightFM lightfm,
 
 cdef void locked_regularize(FastLightFM lightfm,
                             double item_alpha,
-                            double user_alpha) nogil:
+                            double user_alpha) noexcept nogil:
     """
     Apply accumulated L2 regularization to all features. Acquire a lock
     to prevent multiple threads from performing this operation.
