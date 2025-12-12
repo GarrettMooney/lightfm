@@ -1,6 +1,13 @@
 # coding=utf-8
+"""
+Minimal setup.py for custom build commands.
+
+All metadata is defined in pyproject.toml. This file only contains:
+- Extension module definitions with platform-specific flags
+- Custom Cythonize command for template generation
+- Custom Clean command for build cleanup
+"""
 import os
-import pathlib
 import subprocess
 import sys
 import textwrap
@@ -9,6 +16,7 @@ from setuptools import Command, Extension, setup
 
 
 def define_extensions(use_openmp):
+    """Define C extensions with platform-specific compile flags."""
     compile_args = []
     if not os.environ.get("LIGHTFM_NO_CFLAGS"):
         compile_args += ["-ffast-math"]
@@ -40,7 +48,13 @@ def define_extensions(use_openmp):
 
 class Cythonize(Command):
     """
-    Compile the extension .pyx files.
+    Compile the extension .pyx files from the template.
+
+    This command generates two variants from _lightfm_fast.pyx.template:
+    - _lightfm_fast_no_openmp.pyx (single-threaded)
+    - _lightfm_fast_openmp.pyx (multi-threaded with OpenMP)
+
+    Usage: python setup.py cythonize
     """
 
     user_options = []
@@ -52,6 +66,7 @@ class Cythonize(Command):
         pass
 
     def generate_pyx(self):
+        """Generate .pyx files from template with OpenMP/no-OpenMP variants."""
         openmp_import = textwrap.dedent(
             """
              from cython.parallel import parallel, prange
@@ -121,13 +136,15 @@ class Cythonize(Command):
                     extra_link_args=["-fopenmp"],
                 ),
             ],
-            compiler_directives={'language_level' : "3"}
+            compiler_directives={"language_level": "3"},
         )
 
 
 class Clean(Command):
     """
     Clean build files.
+
+    Usage: python setup.py clean
     """
 
     user_options = [("all", None, "(Compatibility with original clean command)")]
@@ -144,47 +161,15 @@ class Clean(Command):
         subprocess.call(["rm", "-rf", os.path.join(pth, "build")])
         subprocess.call(["rm", "-rf", os.path.join(pth, "lightfm.egg-info")])
         subprocess.call(["find", pth, "-name", "lightfm*.pyc", "-type", "f", "-delete"])
-        subprocess.call(["rm", os.path.join(pth, "lightfm", "_lightfm_fast.so")])
+        subprocess.call(["rm", "-f", os.path.join(pth, "lightfm", "_lightfm_fast.so")])
 
 
-def read_version():
-    mod = {}
-    path = os.path.join(
-        os.path.dirname(__file__),
-        "lightfm",
-        "version.py",
-    )
-    with open(path) as fd:
-        exec(fd.read(), mod)
-    return mod["__version__"]
-
-
+# Determine OpenMP support based on platform
 use_openmp = not sys.platform.startswith("darwin") and not sys.platform.startswith(
     "win"
 )
 
-long_description = pathlib.Path(__file__).parent.joinpath("README.md").read_text()
-
 setup(
-    name="lightfm",
-    version=read_version(),
-    description="LightFM recommendation model",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="https://github.com/lyst/lightfm",
-    download_url="https://github.com/lyst/lightfm/tarball/{}".format(read_version()),
-    packages=["lightfm", "lightfm.datasets"],
-    package_data={"": ["*.c"]},
-    install_requires=["numpy", "scipy>=0.17.0", "requests", "scikit-learn"],
-    tests_require=["pytest", "requests", "scikit-learn"],
     cmdclass={"cythonize": Cythonize, "clean": Clean},
-    author="Lyst Ltd (Maciej Kula)",
-    author_email="data@ly.st",
-    license="MIT",
-    classifiers=[
-        "Development Status :: 5 - Production/Stable",
-        "License :: OSI Approved :: MIT License",
-        "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    ],
     ext_modules=define_extensions(use_openmp),
 )

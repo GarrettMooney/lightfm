@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "Cython>=3.0", "numpy>=1.21"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lightfm"
+dynamic = ["version"]
+description = "LightFM recommendation model"
+readme = "README.md"
+license = "MIT"
+authors = [
+    {name = "Lyst Ltd (Maciej Kula)", email = "data@ly.st"}
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.17.0",
+    "scipy>=0.17.0",
+    "requests",
+    "scikit-learn",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "black", "flake8", "pre-commit"]
+docs = ["sphinx", "sphinx_rtd_theme"]
+
+[project.urls]
+Homepage = "https://github.com/lyst/lightfm"
+Documentation = "https://making.lyst.com/lightfm/docs/home.html"
+Repository = "https://github.com/lyst/lightfm"
+
+[tool.setuptools]
+packages = ["lightfm", "lightfm.datasets"]
+
+[tool.setuptools.package-data]
+lightfm = ["*.c"]
+
+[tool.setuptools.dynamic]
+version = {attr = "lightfm.version.__version__"}
