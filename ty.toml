@@ -1,0 +1,21 @@
+# ty type checker configuration
+# See: https://docs.astral.sh/ty/reference/configuration/
+
+[src]
+# Exclude Cython-generated files from type checking
+exclude = [
+    "lightfm/_lightfm_fast*.py",
+    "lightfm/_lightfm_fast*.pyx",
+    "lightfm/_lightfm_fast*.c",
+]
+
+[rules]
+# Ignore unresolved imports for Cython extension modules
+# These are compiled .so files that ty cannot introspect
+unresolved-import = "warn"
+
+# These are due to numpy's type stubs being imprecise with Optional attributes
+# and overloaded functions. The actual code is correct.
+no-matching-overload = "warn"
+invalid-return-type = "warn"
+possibly-missing-attribute = "warn"

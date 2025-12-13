@@ -3,25 +3,33 @@
 Module containing evaluation functions suitable for judging the performance of
 a fitted LightFM model.
 """
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import numpy as np
+from numpy.typing import NDArray
+import scipy.sparse as sp
 
 from ._lightfm_fast import CSRMatrix, calculate_auc_from_rank
+
+if TYPE_CHECKING:
+    from .lightfm import LightFM
 
 __all__ = ["precision_at_k", "recall_at_k", "auc_score", "reciprocal_rank"]
 
 
 def precision_at_k(
-    model,
-    test_interactions,
-    train_interactions=None,
-    k=10,
-    user_features=None,
-    item_features=None,
-    preserve_rows=False,
-    num_threads=1,
-    check_intersections=True,
-):
+    model: LightFM,
+    test_interactions: sp.csr_matrix,
+    train_interactions: sp.csr_matrix | None = None,
+    k: int = 10,
+    user_features: sp.csr_matrix | None = None,
+    item_features: sp.csr_matrix | None = None,
+    preserve_rows: bool = False,
+    num_threads: int = 1,
+    check_intersections: bool = True,
+) -> NDArray[np.float32]:
     """
     Measure the precision at k metric for a model: the fraction of known
     positives in the first k positions of the ranked list of results.
@@ -88,16 +96,16 @@ def precision_at_k(
 
 
 def recall_at_k(
-    model,
-    test_interactions,
-    train_interactions=None,
-    k=10,
-    user_features=None,
-    item_features=None,
-    preserve_rows=False,
-    num_threads=1,
-    check_intersections=True,
-):
+    model: LightFM,
+    test_interactions: sp.csr_matrix,
+    train_interactions: sp.csr_matrix | None = None,
+    k: int = 10,
+    user_features: sp.csr_matrix | None = None,
+    item_features: sp.csr_matrix | None = None,
+    preserve_rows: bool = False,
+    num_threads: int = 1,
+    check_intersections: bool = True,
+) -> NDArray[np.float32]:
     """
     Measure the recall at k metric for a model: the number of positive items in
     the first k positions of the ranked list of results divided by the number
@@ -167,15 +175,15 @@ def recall_at_k(
 
 
 def auc_score(
-    model,
-    test_interactions,
-    train_interactions=None,
-    user_features=None,
-    item_features=None,
-    preserve_rows=False,
-    num_threads=1,
-    check_intersections=True,
-):
+    model: LightFM,
+    test_interactions: sp.csr_matrix,
+    train_interactions: sp.csr_matrix | None = None,
+    user_features: sp.csr_matrix | None = None,
+    item_features: sp.csr_matrix | None = None,
+    preserve_rows: bool = False,
+    num_threads: int = 1,
+    check_intersections: bool = True,
+) -> NDArray[np.float32]:
     """
     Measure the ROC AUC metric for a model: the probability that a randomly
     chosen positive example has a higher score than a randomly chosen negative
@@ -255,15 +263,15 @@ def auc_score(
 
 
 def reciprocal_rank(
-    model,
-    test_interactions,
-    train_interactions=None,
-    user_features=None,
-    item_features=None,
-    preserve_rows=False,
-    num_threads=1,
-    check_intersections=True,
-):
+    model: LightFM,
+    test_interactions: sp.csr_matrix,
+    train_interactions: sp.csr_matrix | None = None,
+    user_features: sp.csr_matrix | None = None,
+    item_features: sp.csr_matrix | None = None,
+    preserve_rows: bool = False,
+    num_threads: int = 1,
+    check_intersections: bool = True,
+) -> NDArray[np.float32]:
     """
     Measure the reciprocal rank metric for a model: 1 / the rank of the highest
     ranked positive example. A perfect score is 1.0.

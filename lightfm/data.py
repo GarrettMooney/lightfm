@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import array
+from typing import Any, Iterable
 
 import numpy as np
 
@@ -170,8 +173,11 @@ class Dataset(object):
 
     """
 
-    def __init__(self, user_identity_features=True, item_identity_features=True):
-
+    def __init__(
+        self,
+        user_identity_features: bool = True,
+        item_identity_features: bool = True,
+    ) -> None:
         self._user_identity_features = user_identity_features
         self._item_identity_features = item_identity_features
 
@@ -187,7 +193,13 @@ class Dataset(object):
                 "You must call fit first to build the item and user " "id mappings."
             )
 
-    def fit(self, users, items, user_features=None, item_features=None):
+    def fit(
+        self,
+        users: Iterable[Any],
+        items: Iterable[Any],
+        user_features: Iterable[Any] | None = None,
+        item_features: Iterable[Any] | None = None,
+    ) -> Dataset:
         """
         Fit the user/item id and feature name mappings.
 
@@ -210,8 +222,12 @@ class Dataset(object):
         return self.fit_partial(users, items, user_features, item_features)
 
     def fit_partial(
-        self, users=None, items=None, user_features=None, item_features=None
-    ):
+        self,
+        users: Iterable[Any] | None = None,
+        items: Iterable[Any] | None = None,
+        user_features: Iterable[Any] | None = None,
+        item_features: Iterable[Any] | None = None,
+    ) -> Dataset:
         """
         Fit the user/item id and feature name mappings.
 
@@ -256,6 +272,8 @@ class Dataset(object):
                     item_feature, len(self._item_feature_mapping)
                 )
 
+        return self
+
     def _unpack_datum(self, datum):
 
         if len(datum) == 3:
@@ -286,14 +304,16 @@ class Dataset(object):
 
         return (user_idx, item_idx, weight)
 
-    def interactions_shape(self):
+    def interactions_shape(self) -> tuple[int, int]:
         """
         Return a tuple of (num users, num items).
         """
 
         return (len(self._user_id_mapping), len(self._item_id_mapping))
 
-    def build_interactions(self, data):
+    def build_interactions(
+        self, data: Iterable[tuple[Any, Any] | tuple[Any, Any, float]]
+    ) -> tuple[sp.coo_matrix, sp.coo_matrix]:
         """
         Build an interaction matrix.
 
@@ -329,7 +349,7 @@ class Dataset(object):
 
         return (interactions.tocoo(), weights.tocoo())
 
-    def user_features_shape(self):
+    def user_features_shape(self) -> tuple[int, int]:
         """
         Return the shape of the user features matrix.
 
@@ -342,7 +362,11 @@ class Dataset(object):
 
         return (len(self._user_id_mapping), len(self._user_feature_mapping))
 
-    def build_user_features(self, data, normalize=True):
+    def build_user_features(
+        self,
+        data: Iterable[tuple[Any, Iterable[Any] | dict[Any, float]]],
+        normalize: bool = True,
+    ) -> sp.csr_matrix:
         """
         Build a user features matrix out of an iterable of the form
         (user id, [list of feature names]) or (user id, {feature name: feature weight}).
@@ -375,7 +399,7 @@ class Dataset(object):
 
         return builder.build(data)
 
-    def item_features_shape(self):
+    def item_features_shape(self) -> tuple[int, int]:
         """
         Return the shape of the item features matrix.
 
@@ -388,7 +412,11 @@ class Dataset(object):
 
         return (len(self._item_id_mapping), len(self._item_feature_mapping))
 
-    def build_item_features(self, data, normalize=True):
+    def build_item_features(
+        self,
+        data: Iterable[tuple[Any, Iterable[Any] | dict[Any, float]]],
+        normalize: bool = True,
+    ) -> sp.csr_matrix:
         """
         Build a item features matrix out of an iterable of the form
         (item id, [list of feature names]) or (item id, {feature name: feature weight}).
@@ -421,7 +449,7 @@ class Dataset(object):
 
         return builder.build(data)
 
-    def model_dimensions(self):
+    def model_dimensions(self) -> tuple[int, int]:
         """
         Returns a tuple that characterizes the number of user/item feature
         embeddings in a LightFM model for this dataset.
@@ -429,7 +457,9 @@ class Dataset(object):
 
         return (len(self._user_feature_mapping), len(self._item_feature_mapping))
 
-    def mapping(self):
+    def mapping(
+        self,
+    ) -> tuple[dict[Any, int], dict[Any, int], dict[Any, int], dict[Any, int]]:
         """
         Return the constructed mappings.
 
