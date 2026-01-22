@@ -15,7 +15,50 @@ import textwrap
 from setuptools import Command, Extension, setup
 
 
-def define_extensions(use_openmp):
+def find_libomp():
+    """
+    Find libomp installation on macOS (via Homebrew).
+
+    Returns a tuple of (include_dir, lib_dir) if found, or (None, None) otherwise.
+    """
+    if not sys.platform.startswith("darwin"):
+        return None, None
+
+    # Check common Homebrew locations
+    # Apple Silicon: /opt/homebrew/opt/libomp
+    # Intel Mac: /usr/local/opt/libomp
+    homebrew_paths = [
+        "/opt/homebrew/opt/libomp",  # Apple Silicon
+        "/usr/local/opt/libomp",      # Intel Mac
+    ]
+
+    for base_path in homebrew_paths:
+        include_dir = os.path.join(base_path, "include")
+        lib_dir = os.path.join(base_path, "lib")
+        if os.path.exists(include_dir) and os.path.exists(lib_dir):
+            return include_dir, lib_dir
+
+    # Try to find via brew --prefix
+    try:
+        result = subprocess.run(
+            ["brew", "--prefix", "libomp"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            base_path = result.stdout.strip()
+            include_dir = os.path.join(base_path, "include")
+            lib_dir = os.path.join(base_path, "lib")
+            if os.path.exists(include_dir) and os.path.exists(lib_dir):
+                return include_dir, lib_dir
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+
+    return None, None
+
+
+def define_extensions(use_openmp, libomp_paths=None):
     """Define C extensions with platform-specific compile flags."""
     compile_args = []
     if not os.environ.get("LIGHTFM_NO_CFLAGS"):
@@ -35,15 +78,37 @@ def define_extensions(use_openmp):
                 extra_compile_args=compile_args,
             )
         ]
+
+    # Build OpenMP-enabled extension
+    openmp_compile_args = compile_args.copy()
+    openmp_link_args = []
+    include_dirs = []
+    library_dirs = []
+
+    if sys.platform.startswith("darwin") and libomp_paths:
+        # macOS with libomp from Homebrew
+        include_dir, lib_dir = libomp_paths
+        print(f"Compiling with OpenMP support (libomp from {lib_dir}).")
+        include_dirs.append(include_dir)
+        library_dirs.append(lib_dir)
+        openmp_compile_args.extend(["-Xpreprocessor", "-fopenmp"])
+        openmp_link_args.extend(["-lomp"])
     else:
-        return [
-            Extension(
-                "lightfm._lightfm_fast_openmp",
-                ["lightfm/_lightfm_fast_openmp.c"],
-                extra_link_args=["-fopenmp"],
-                extra_compile_args=compile_args + ["-fopenmp"],
-            )
-        ]
+        # Linux and other platforms with native OpenMP
+        print("Compiling with OpenMP support.")
+        openmp_compile_args.append("-fopenmp")
+        openmp_link_args.append("-fopenmp")
+
+    return [
+        Extension(
+            "lightfm._lightfm_fast_openmp",
+            ["lightfm/_lightfm_fast_openmp.c"],
+            include_dirs=include_dirs,
+            library_dirs=library_dirs,
+            extra_link_args=openmp_link_args,
+            extra_compile_args=openmp_compile_args,
+        )
+    ]
 
 
 class Cythonize(Command):
@@ -164,12 +229,27 @@ class Clean(Command):
         subprocess.call(["rm", "-f", os.path.join(pth, "lightfm", "_lightfm_fast.so")])
 
 
-# Determine OpenMP support based on platform
-use_openmp = not sys.platform.startswith("darwin") and not sys.platform.startswith(
-    "win"
-)
+# Determine OpenMP support
+libomp_paths = None
+if sys.platform.startswith("darwin"):
+    # macOS: check for libomp from Homebrew
+    libomp_paths = find_libomp()
+    if libomp_paths[0] is not None:
+        use_openmp = True
+    else:
+        print(
+            "libomp not found. Install with: brew install libomp\n"
+            "Building without OpenMP support (single-threaded)."
+        )
+        use_openmp = False
+elif sys.platform.startswith("win"):
+    # Windows: OpenMP not yet supported
+    use_openmp = False
+else:
+    # Linux and other Unix-like systems: native OpenMP support
+    use_openmp = True
 
 setup(
     cmdclass={"cythonize": Cythonize, "clean": Clean},
-    ext_modules=define_extensions(use_openmp),
+    ext_modules=define_extensions(use_openmp, libomp_paths),
 )
