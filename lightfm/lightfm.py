@@ -1,9 +1,15 @@
 # coding=utf-8
-from __future__ import print_function
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
+from numpy.typing import NDArray
 import scipy.sparse as sp
 from sklearn.base import BaseEstimator
+
+if TYPE_CHECKING:
+    from numpy.random import RandomState
 
 from ._lightfm_fast import (
     CSRMatrix,
@@ -188,19 +194,19 @@ class LightFM(BaseEstimator):
 
     def __init__(
         self,
-        no_components=10,
-        k=5,
-        n=10,
-        learning_schedule="adagrad",
-        loss="logistic",
-        learning_rate=0.05,
-        rho=0.95,
-        epsilon=1e-6,
-        item_alpha=0.0,
-        user_alpha=0.0,
-        max_sampled=10,
-        random_state=None,
-    ):
+        no_components: int = 10,
+        k: int = 5,
+        n: int = 10,
+        learning_schedule: Literal["adagrad", "adadelta"] = "adagrad",
+        loss: Literal["logistic", "bpr", "warp", "warp-kos"] = "logistic",
+        learning_rate: float = 0.05,
+        rho: float = 0.95,
+        epsilon: float = 1e-6,
+        item_alpha: float = 0.0,
+        user_alpha: float = 0.0,
+        max_sampled: int = 10,
+        random_state: int | RandomState | None = None,
+    ) -> None:
 
         assert item_alpha >= 0.0
         assert user_alpha >= 0.0
@@ -493,14 +499,14 @@ class LightFM(BaseEstimator):
 
     def fit(
         self,
-        interactions,
-        user_features=None,
-        item_features=None,
-        sample_weight=None,
-        epochs=1,
-        num_threads=1,
-        verbose=False,
-    ):
+        interactions: sp.coo_matrix,
+        user_features: sp.csr_matrix | None = None,
+        item_features: sp.csr_matrix | None = None,
+        sample_weight: sp.coo_matrix | None = None,
+        epochs: int = 1,
+        num_threads: int = 1,
+        verbose: bool = False,
+    ) -> LightFM:
         """
         Fit the model.
 
@@ -559,14 +565,14 @@ class LightFM(BaseEstimator):
 
     def fit_partial(
         self,
-        interactions,
-        user_features=None,
-        item_features=None,
-        sample_weight=None,
-        epochs=1,
-        num_threads=1,
-        verbose=False,
-    ):
+        interactions: sp.coo_matrix,
+        user_features: sp.csr_matrix | None = None,
+        item_features: sp.csr_matrix | None = None,
+        sample_weight: sp.coo_matrix | None = None,
+        epochs: int = 1,
+        num_threads: int = 1,
+        verbose: bool = False,
+    ) -> LightFM:
         """
         Fit the model.
 
@@ -759,8 +765,13 @@ class LightFM(BaseEstimator):
             )
 
     def predict(
-        self, user_ids, item_ids, item_features=None, user_features=None, num_threads=1
-    ):
+        self,
+        user_ids: int | NDArray[np.int32],
+        item_ids: NDArray[np.int32],
+        item_features: sp.csr_matrix | None = None,
+        user_features: sp.csr_matrix | None = None,
+        num_threads: int = 1,
+    ) -> NDArray[np.float32]:
         """
         Compute the recommendation score for user-item pairs.
 
@@ -883,13 +894,13 @@ class LightFM(BaseEstimator):
 
     def predict_rank(
         self,
-        test_interactions,
-        train_interactions=None,
-        item_features=None,
-        user_features=None,
-        num_threads=1,
-        check_intersections=True,
-    ):
+        test_interactions: sp.csr_matrix,
+        train_interactions: sp.csr_matrix | None = None,
+        item_features: sp.csr_matrix | None = None,
+        user_features: sp.csr_matrix | None = None,
+        num_threads: int = 1,
+        check_intersections: bool = True,
+    ) -> sp.csr_matrix:
         """
         Predict the rank of selected interactions. Computes recommendation
         rankings across all items for every user in interactions and calculates
@@ -988,7 +999,9 @@ class LightFM(BaseEstimator):
 
         return ranks
 
-    def get_item_representations(self, features=None):
+    def get_item_representations(
+        self, features: sp.csr_matrix | None = None
+    ) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
         """
         Get the latent representations for items given model and features.
 
@@ -1017,7 +1030,9 @@ class LightFM(BaseEstimator):
 
         return features * self.item_biases, features * self.item_embeddings
 
-    def get_user_representations(self, features=None):
+    def get_user_representations(
+        self, features: sp.csr_matrix | None = None
+    ) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
         """
         Get the latent representations for users given model and features.
 
@@ -1046,7 +1061,7 @@ class LightFM(BaseEstimator):
 
         return features * self.user_biases, features * self.user_embeddings
 
-    def get_params(self, deep=True):
+    def get_params(self, deep: bool = True) -> dict[str, Any]:
         """
         Get parameters for this estimator.
 
@@ -1081,7 +1096,7 @@ class LightFM(BaseEstimator):
 
         return params
 
-    def set_params(self, **params):
+    def set_params(self, **params: Any) -> LightFM:
         """
         Set the parameters of this estimator.
 

@@ -2,9 +2,15 @@
 """
 Dataset splitting functions.
 """
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import numpy as np
 import scipy.sparse as sp
+
+if TYPE_CHECKING:
+    from numpy.random import RandomState
 
 
 def _shuffle(uids, iids, data, random_state):
@@ -15,7 +21,11 @@ def _shuffle(uids, iids, data, random_state):
     return (uids[shuffle_indices], iids[shuffle_indices], data[shuffle_indices])
 
 
-def random_train_test_split(interactions, test_percentage=0.2, random_state=None):
+def random_train_test_split(
+    interactions: sp.coo_matrix | sp.csr_matrix | sp.csc_matrix | sp.lil_matrix,
+    test_percentage: float = 0.2,
+    random_state: int | RandomState | None = None,
+) -> tuple[sp.coo_matrix, sp.coo_matrix]:
     """
     Randomly split interactions between training and testing.
 
