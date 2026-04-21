@@ -103,7 +103,7 @@ Cost: new dependency (`safetensors`, ~5MB, Rust-prebuilt wheels on linux/macOS/w
 ```python
 class InferenceLightFM:
     @classmethod
-    def load(cls, path: str | Path, *, mmap: bool = True, preload: bool = False) -> "InferenceLightFM": ...
+    def load(cls, path: str | Path, *, mmap: bool = True) -> "InferenceLightFM": ...
 
     def predict(
         self,
@@ -143,8 +143,8 @@ class InferenceLightFM:
 
 - `mmap=True` (default): arrays are views onto file-backed memory. Pages are shared across forks via the OS page cache. This is the core perf property.
 - `mmap=False`: arrays are read into heap memory. Escape hatch for tests and environments where mmap misbehaves.
-- `preload=False` (default): no pre-touching. First-request workers incur page faults.
-- `preload=True`: parent process issues `madvise(MADV_WILLNEED)` and reads each tensor once, populating page cache before any forks. Trades parent load time for faster first-request latency in workers.
+
+`preload` / `madvise` is deliberately **not** in v1 (see v2 hooks). User's primary axes are artifact size and runtime RAM; cold-start latency was explicitly deprioritized.
 
 ### Validation at load
 
@@ -196,7 +196,13 @@ Steps:
 
 ### Subtlety: joblib forward-compatibility
 
-Existing `lightfm.joblib` files were dumped with whatever Python/NumPy versions were in d152 at training time. The converter must successfully load them in a newer environment. CI includes a round-trip test with a fixture produced by an older `joblib.dump` path.
+Existing `lightfm.joblib` files were dumped with whatever Python/NumPy versions were in d152 at training time. The converter must successfully load them in a newer environment.
+
+**Concrete CI compat matrix (relevant given the recently-merged `feature/numpy2-compat`):**
+- Fixture 1: tiny model dumped under `numpy < 2.0`, `joblib < 1.3`. Converter runs under numpy 2.x in CI. This is the realistic d152 scenario — their current blob was produced under numpy 1.x.
+- Fixture 2: tiny model dumped under current environment. Baseline round-trip.
+
+Both must load → convert → predict-parity successfully.
 
 ### Out of scope for converter
 
@@ -243,9 +249,15 @@ Ordered by load-bearing importance.
 
 ### 1. Forked workers share pages (the core perf claim)
 
-**This is the whole point of the project.** Load an `InferenceLightFM` with a medium-sized model (~500MB), fork N workers via `multiprocessing.Pool`, have each call `predict` on a batch. Assert total peak RSS across children ≈ 1× model size + per-worker overhead, not N× model size. Uses `psutil.Process.memory_info().rss` sampled at peak.
+**This is the whole point of the project.** Load an `InferenceLightFM` with a medium-sized model (~500MB of embeddings), fork N=4 workers via `multiprocessing.Pool`, have each call `predict` on a batch.
 
-If this test ever regresses, the project has failed silently — it must live in the core test suite.
+**Linux (quantitative pass/fail):** use PSS (Proportional Set Size) via `/proc/<pid>/smaps_rollup` — PSS correctly accounts for shared pages (each shared page counts as `size / num_sharers` in each process). Summing PSS across all worker children + parent gives a true memory footprint. RSS double-counts shared pages and cannot distinguish shared-vs-copied; the test must use PSS on Linux.
+
+- Assertion: `sum(PSS) < 1.5 × single_process_loaded_baseline`. The `1.5×` tolerance covers per-worker Python interpreter overhead, non-shared stack/heap, and minor variance. A non-mmap regression would show `sum(PSS) ≈ N × model_size`, well above the threshold.
+
+**macOS (coarse sanity check):** PSS isn't available via equivalent APIs. Fall back to RSS with a looser check — `max(worker RSS) ≈ model_size` (individual workers don't exceed single-process baseline). Not as strong a signal but catches catastrophic regressions.
+
+If the Linux test ever regresses, the project has failed silently — it must live in the core test suite. The macOS check runs as a smoke test only.
 
 ### 2. Round-trip correctness via converter
 
@@ -263,11 +275,15 @@ For each `loss ∈ {logistic, bpr, warp, warp-kos}` and `learning_schedule ∈ {
 
 Same round-trip with `user_features` and `item_features` passed to predict. Exercises the different Cython code path.
 
-### 6. Error paths
+### 6. `LightFM.predict` behavior preservation under `_predict_impl` extraction
 
-Each Section 5 error has an explicit test: corrupt header, missing tensor, wrong dtype, shape mismatch, unknown format version, missing file, unfitted model in converter, non-LightFM object in converter.
+Run the existing `tests/` suite before the `_predict_impl` refactor and again after. Full diff must be empty. The risk is subtle — e.g., the `user_ids` int-vs-array coercion at `lightfm.py:832-836` must land in the shared helper (not stay in `LightFM.predict`), or `InferenceLightFM.predict(0, [...])` silently breaks while the training-class tests still pass.
 
-### 7. Cross-platform smoke
+### 7. Error paths
+
+Each error case from "Error Handling" has an explicit test: corrupt header, missing tensor, wrong dtype, shape mismatch, unknown format version, missing file, unfitted model in converter, non-LightFM object in converter.
+
+### 8. Cross-platform smoke
 
 Load + predict on Linux and macOS in CI. Validates safetensors wheel availability. Windows optional.
 
@@ -310,6 +326,7 @@ Load + predict on Linux and macOS in CI. Validates safetensors wheel availabilit
 | GPU backend | `_artifact.py` is single format boundary; safetensors reads into torch/JAX natively | New class `GpuInferenceLightFM` (or `device=` param); same artifact |
 | int8 quantization | `embeddings_dtype` + room for `scales` / `zero_points` tensors in header | Additive; `format_version` bump ensures v1 loaders refuse v2 artifacts cleanly |
 | Streaming converter | `convert.py` is a separate module | Additive function alongside existing |
+| `preload=True` / `madvise(MADV_WILLNEED)` | `InferenceLightFM.load()` kwargs extensible | Additive kwarg; conditional on `sys.platform` for non-Linux fallback |
 
 ## Expected Outcomes
 
