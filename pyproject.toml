@@ -29,6 +29,7 @@ dependencies = [
     "scipy>=0.17.0",
     "requests",
     "scikit-learn",
+    "safetensors>=0.4",
 ]
 
 [project.optional-dependencies]
@@ -41,7 +42,7 @@ Documentation = "https://making.lyst.com/lightfm/docs/home.html"
 Repository = "https://github.com/lyst/lightfm"
 
 [tool.setuptools]
-packages = ["lightfm", "lightfm.datasets"]
+packages = ["lightfm", "lightfm.datasets", "lightfm.inference"]
 
 [tool.setuptools.package-data]
 lightfm = ["*.c"]
