@@ -49,3 +49,93 @@ def test_mmap_returns_views(tmp_path):
     # arrays have base=None (or a numpy-internal owner).
     assert loaded_arrays["item_embeddings"].base is not None
     np.testing.assert_array_equal(loaded_arrays["item_embeddings"], arrays["item_embeddings"])
+
+
+def test_missing_file(tmp_path):
+    with pytest.raises(_artifact.ArtifactLoadError, match="artifact not found"):
+        _artifact.load(tmp_path / "does-not-exist.safetensors")
+
+
+def test_missing_format_version(tmp_path):
+    path = tmp_path / "model.safetensors"
+    from safetensors.numpy import save_file
+    save_file(_tiny_arrays(), str(path), metadata={"loss": "warp"})
+    with pytest.raises(_artifact.ArtifactLoadError, match="missing format_version"):
+        _artifact.load(path, mmap=False)
+
+
+def test_unknown_format_version(tmp_path):
+    path = tmp_path / "model.safetensors"
+    from safetensors.numpy import save_file
+    save_file(_tiny_arrays(), str(path), metadata={
+        "format_version": "999",
+        "no_components": "8",
+        "loss": "warp",
+        "learning_schedule": "adagrad",
+        "embeddings_dtype": "float32",
+    })
+    with pytest.raises(_artifact.ArtifactLoadError, match="version '999'"):
+        _artifact.load(path, mmap=False)
+
+
+def test_missing_required_tensor(tmp_path):
+    path = tmp_path / "model.safetensors"
+    from safetensors.numpy import save_file
+    arrays = _tiny_arrays()
+    del arrays["item_biases"]
+    save_file(arrays, str(path), metadata={
+        "format_version": "1",
+        "no_components": "8",
+        "loss": "warp",
+        "learning_schedule": "adagrad",
+        "embeddings_dtype": "float32",
+    })
+    with pytest.raises(_artifact.ArtifactLoadError, match="missing required tensors.*item_biases"):
+        _artifact.load(path, mmap=False)
+
+
+def test_shape_inconsistency(tmp_path):
+    path = tmp_path / "model.safetensors"
+    from safetensors.numpy import save_file
+    arrays = _tiny_arrays()
+    # item_biases length != item_embeddings rows
+    arrays["item_biases"] = np.zeros(7, dtype=np.float32)
+    save_file(arrays, str(path), metadata={
+        "format_version": "1",
+        "no_components": "8",
+        "loss": "warp",
+        "learning_schedule": "adagrad",
+        "embeddings_dtype": "float32",
+    })
+    with pytest.raises(_artifact.ArtifactLoadError, match="item_biases.*does not match"):
+        _artifact.load(path, mmap=False)
+
+
+def test_dtype_mismatch(tmp_path):
+    path = tmp_path / "model.safetensors"
+    from safetensors.numpy import save_file
+    arrays = _tiny_arrays()
+    arrays["item_embeddings"] = arrays["item_embeddings"].astype(np.float64)
+    save_file(arrays, str(path), metadata={
+        "format_version": "1",
+        "no_components": "8",
+        "loss": "warp",
+        "learning_schedule": "adagrad",
+        "embeddings_dtype": "float32",
+    })
+    with pytest.raises(_artifact.ArtifactLoadError, match="dtype float64.*expected float32"):
+        _artifact.load(path, mmap=False)
+
+
+def test_unsupported_declared_dtype(tmp_path):
+    path = tmp_path / "model.safetensors"
+    from safetensors.numpy import save_file
+    save_file(_tiny_arrays(), str(path), metadata={
+        "format_version": "1",
+        "no_components": "8",
+        "loss": "warp",
+        "learning_schedule": "adagrad",
+        "embeddings_dtype": "float16",
+    })
+    with pytest.raises(_artifact.ArtifactLoadError, match="embeddings_dtype='float16'"):
+        _artifact.load(path, mmap=False)
