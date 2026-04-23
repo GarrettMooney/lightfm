@@ -90,7 +90,7 @@ def make_fitted_model(
     """
 ```
 
-Uses `LightFM._initialize(no_components, n_items, n_users)` to set up the 12 arrays with the right shapes, then fills each with `np.random.default_rng(seed).standard_normal(shape, dtype=np.float32)`. The `gradients` arrays for adagrad have the `+= 1` convention that `_initialize` already handles.
+Uses `LightFM._initialize(no_components, n_items, n_users)` to set up the 12 arrays with the right shapes. Note: `_initialize`'s real parameter names (from `lightfm.py:288`) are `(no_components, no_item_features, no_user_features)`; in the default identity-feature-matrix case `no_item_features == n_items` and `no_user_features == n_users`, so passing positionally is correct. `_initialize` reads `self.random_state`, so the factory must construct `LightFM(random_state=seed, loss=..., learning_schedule=...)` first, then call `_initialize`, then overwrite the embeddings with fresh `standard_normal` draws. The `gradients` arrays for adagrad have the `+= 1` convention that `_initialize` already handles; the factory does not touch them after initialization.
 
 Size accounting (float32 = 4 bytes):
 - `tiny`: 2×(1K+5K)×32×4 + 4×(1K+5K)×4 + 2×(1K+5K)×32×4 [grads+momentum] ≈ 3.1 MB for arrays, ~800KB-1MB joblib on disk
@@ -115,7 +115,9 @@ Writes `<artifact_dir>/model.joblib` via `joblib.dump(model, path)` and `<artifa
 }
 ```
 
-The artifact files are left on disk so `bench_load.py` can reuse them without re-dumping.
+The artifact files are left on disk so `bench_load.py` and `bench_ram.py` can reuse them without re-dumping.
+
+**Axis ordering dependency.** `bench_load` and `bench_ram` require the artifacts produced by `bench_size`. The CLI enforces this implicit ordering: `--skip-axis size` is a supported flag, but if any axis that depends on the size-axis artifacts is enabled and the artifacts don't exist, `__main__.py` runs `bench_size` silently to produce them first, logging a one-line notice. This avoids the "confusing FileNotFoundError because you skipped size" failure mode and keeps the CLI intuitive — users skip axes to save time, not to produce errors.
 
 ### `bench_load.py` — Axis B
 
@@ -160,27 +162,56 @@ def run(artifact_dir: Path, n_workers: int = 4) -> dict:
 
 Skips entirely on Windows (no fork). Skips on any platform if `n_workers < 1`.
 
-**Variant A (joblib + fork)** — mirrors the old d152 pattern:
+**Variant A (joblib + fork)** — mirrors the old d152 pattern. Critical: the model must be inherited via fork, *not* pickled through `Pool.map`'s arg queue (which would measure the wrong thing — pickle/unpickle round-trip overhead instead of CoW behavior). Use a module-level global:
+
 ```python
-parent_model = joblib.load(joblib_path)
-ctx = multiprocessing.get_context("fork")
-with ctx.Pool(n_workers) as pool:
-    results = pool.map(_joblib_worker, [(parent_model_is_captured_via_fork, seed) for seed in ...])
+# benchmarks/bench_ram.py — module scope
+_MODEL_A = None
+
+
+def _joblib_worker(seed: int) -> tuple[int, int]:
+    """Worker reads _MODEL_A from the module namespace (inherited via fork).
+    Returns (pid, memory_bytes)."""
+    rng = np.random.default_rng(seed)
+    user_ids = rng.integers(0, _MODEL_A.user_embeddings.shape[0], size=10_000, dtype=np.int32)
+    item_ids = rng.integers(0, _MODEL_A.item_embeddings.shape[0], size=10_000, dtype=np.int32)
+    _MODEL_A.predict(user_ids, item_ids)
+    return os.getpid(), _sample_memory_bytes()
+
+
+def _run_variant_a(joblib_path: Path, n_workers: int) -> list[tuple[int, int]]:
+    global _MODEL_A
+    _MODEL_A = joblib.load(str(joblib_path))
+    try:
+        ctx = multiprocessing.get_context("fork")
+        with ctx.Pool(n_workers) as pool:
+            return pool.map(_joblib_worker, list(range(n_workers)))
+    finally:
+        _MODEL_A = None  # release in parent
 ```
 
-Wait — `pool.map`'s first arg is a callable, not a captured model. The model must be visible to the child at fork time. We accomplish this by binding `parent_model` into a module-level global before forking (or using a closure that `Pool` pickles with `forkserver`). For `fork` start method, children inherit the parent's address space, so the worker function can reference a module-level `_MODEL_A` variable set before `Pool()` is called.
+**Variant B (mmap + fork)** — mirrors `test_fork_sharing.py`. Each worker opens its own `InferenceLightFM.load(..., mmap=True)` in the child; the OS page cache shares the file-backed pages regardless of who opened the mapping. The parent also loads (and holds a reference) so the mmap stays instantiated for the duration — but note this parent reference doesn't influence PSS measurements, which run inside children:
 
-**Variant B (mmap + fork)** — mirrors the `test_fork_sharing.py` approach:
 ```python
-parent_inf = InferenceLightFM.load(safetensors_path, mmap=True)
-# pre-touch to make sure mmap is instantiated
-_ = parent_inf.item_embeddings[0, 0]
-ctx = multiprocessing.get_context("fork")
-with ctx.Pool(n_workers) as pool:
-    results = pool.map(_mmap_worker, [(safetensors_path, seed) for seed in ...])
+def _mmap_worker(args: tuple[str, int]) -> tuple[int, int]:
+    path, seed = args
+    model = InferenceLightFM.load(path, mmap=True)
+    rng = np.random.default_rng(seed)
+    user_ids = rng.integers(0, model.user_embeddings.shape[0], size=10_000, dtype=np.int32)
+    item_ids = rng.integers(0, model.item_embeddings.shape[0], size=10_000, dtype=np.int32)
+    model.predict(user_ids, item_ids)
+    return os.getpid(), _sample_memory_bytes()
+
+
+def _run_variant_b(safetensors_path: Path, n_workers: int) -> list[tuple[int, int]]:
+    parent = InferenceLightFM.load(safetensors_path, mmap=True)  # keep mapping live
+    _ = parent.item_embeddings[0, 0]  # fault in the first page so the mmap is real
+    ctx = multiprocessing.get_context("fork")
+    with ctx.Pool(n_workers) as pool:
+        return pool.map(_mmap_worker, [(str(safetensors_path), i) for i in range(n_workers)])
 ```
 
-In both variants, the worker function:
+In both variants, the worker:
 1. Runs a `predict` batch (10K random pairs — small enough to be fast, large enough to touch many pages).
 2. Samples its own memory footprint:
    - Linux: read `/proc/self/smaps_rollup` for `Pss:` in KB → bytes.
@@ -256,7 +287,7 @@ Behavior:
 
 Benchmarks themselves are not tested as correctness suites — they test correctness elsewhere. But we do want:
 
-- **One smoke test** in `tests/benchmarks/test_smoke.py` that runs the benchmark CLI at `--size tiny` and asserts it produces a valid JSON file. Catches breakage of the benchmark machinery itself. Skippable via `-m "not slow"` marker if tiny still takes a few seconds.
+- **One smoke test** in `tests/benchmarks/test_smoke.py` that runs the benchmark CLI at `--size tiny` and asserts it produces a valid JSON file. Catches breakage of the benchmark machinery itself. Marked `@pytest.mark.slow` (skippable via `-m "not slow"`); requires the `slow` marker to be registered in `pyproject.toml` under `[tool.pytest.ini_options] markers = ["slow: marks tests as slow"]` to avoid pytest warnings about unknown markers.
 - **`make_fitted_model` should produce a model whose `.predict()` doesn't raise** — covered by the smoke test.
 
 Not tested: the numbers themselves. These are measurements, not assertions.
@@ -272,14 +303,14 @@ Not tested: the numbers themselves. These are measurements, not assertions.
 - `benchmarks/bench_ram.py`
 - `benchmarks/results.py`
 - `benchmarks/results/.gitkeep`
-- `benchmarks/results/sample-medium.json` (committed after first real run on reviewer's hardware)
+- `benchmarks/results/sample-medium.json` (committed after first real run — `metadata.host.platform` records the generating machine; Linux PSS numbers and macOS RSS numbers are not directly comparable across platforms, so readers of the sample should consult `axes.ram.measurement` before interpreting values)
 - `tests/benchmarks/__init__.py`
 - `tests/benchmarks/test_smoke.py`
 
 ## Files Modified
 
 - `.gitignore` — add `benchmarks/results/*.json` and negate `!benchmarks/results/sample-*.json`
-- `pyproject.toml` — no changes required (uses existing `numpy`, `scipy`, `joblib` already present; `psutil` already in dev extras)
+- `pyproject.toml` — register the `slow` pytest marker under `[tool.pytest.ini_options]` (or create the section if missing). All runtime deps — `numpy`, `scipy`, `joblib`, `psutil` — are already present.
 
 ## Expected Outcomes
 
