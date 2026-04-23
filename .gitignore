@@ -25,3 +25,7 @@ lightfm/_lightfm_fast_no_openmp.pyx
 
 # Worktrees
 .worktrees/
+
+# Benchmark result files are ignored except committed samples
+benchmarks/results/*.json
+!benchmarks/results/sample-*.json

@@ -49,3 +49,8 @@ lightfm = ["*.c"]
 
 [tool.setuptools.dynamic]
 version = {attr = "lightfm.version.__version__"}
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
