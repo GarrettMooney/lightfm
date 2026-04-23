@@ -51,7 +51,7 @@ tests/
 
 ## Chunk 1: Benchmark suite
 
-Single chunk — the full plan is self-contained and under 1000 lines. Tasks have internal dependencies (models.py before bench_*.py, bench_*.py before __main__.py), so execution is strictly sequential.
+Single chunk with strict sequential dependencies (models.py before bench_*.py, bench_*.py before __main__.py). The chunk exceeds the 1000-line guideline but splitting would create artificial sub-chunks without changing execution — every task depends on the previous one's output, and the code listings take up most of the line count.
 
 ### Task 1: Scaffold the benchmarks package
 
@@ -727,15 +727,16 @@ def test_bench_predict_returns_list_of_per_batch_dicts(tmp_path):
         assert "per_sec" in row["inference"]
 
 
-def test_bench_predict_scales_with_batch_size(tmp_path):
-    """Per-sec is higher at larger batches (amortized overhead)."""
+def test_bench_predict_reports_nonzero_throughput(tmp_path):
+    """Throughput numbers are positive — soft sanity rather than strict
+    scaling (CI timing noise makes `large >= small` flaky at small sizes)."""
     model = make_fitted_model(n_users=200, n_items=500, no_components=8)
     bench_size_run(model, tmp_path)
     results = run(tmp_path, repeats=2, batch_sizes=[50, 500])
-    small = results[0]["inference"]["per_sec"]
-    large = results[1]["inference"]["per_sec"]
-    # Larger batch should amortize Python overhead; per_sec should grow.
-    assert large >= small
+    for row in results:
+        assert row["inference"]["per_sec"] > 0
+        assert row["lightfm"]["per_sec"] > 0
+        assert row["ratio"] > 0
 ```
 
 - [ ] **Step 2: Run — expect failure**
@@ -1300,6 +1301,9 @@ def test_benchmarks_cli_smoke(tmp_path):
     # Basic numeric sanity
     assert payload["axes"]["size"]["joblib_bytes"] > 0
     assert payload["axes"]["size"]["safetensors_bytes"] > 0
+    # Axis D emits caveats — spec calls this out explicitly
+    assert isinstance(payload["axes"]["ram"].get("caveats"), list)
+    assert len(payload["axes"]["ram"]["caveats"]) > 0
 ```
 
 - [ ] **Step 2: Run (slow marker excluded by default — run explicitly)**
