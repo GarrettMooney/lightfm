@@ -1,0 +1,142 @@
+{
+  "axes": {
+    "load": {
+      "inference_heap": {
+        "max": 0.11448787478730083,
+        "median": 0.11331829195842147,
+        "min": 0.11132304230704904,
+        "repeats": 5
+      },
+      "inference_mmap": {
+        "max": 0.1076061250641942,
+        "median": 0.10628216713666916,
+        "min": 0.1050412910990417,
+        "repeats": 5
+      },
+      "joblib": {
+        "max": 0.48657095804810524,
+        "median": 0.30282912496477365,
+        "min": 0.30128395883366466,
+        "repeats": 5
+      }
+    },
+    "predict": [
+      {
+        "batch_size": 1000,
+        "inference": {
+          "max": 0.001535000279545784,
+          "median": 0.0012817499227821827,
+          "min": 0.0010333750396966934,
+          "per_sec": 780183
+        },
+        "lightfm": {
+          "max": 0.0012347078882157803,
+          "median": 0.0011432911269366741,
+          "min": 0.001024333294481039,
+          "per_sec": 874667
+        },
+        "ratio": 0.8919771753135765
+      },
+      {
+        "batch_size": 10000,
+        "inference": {
+          "max": 0.004868250340223312,
+          "median": 0.004689834080636501,
+          "min": 0.004323333036154509,
+          "per_sec": 2132271
+        },
+        "lightfm": {
+          "max": 0.00553166726604104,
+          "median": 0.005337124690413475,
+          "min": 0.005049833096563816,
+          "per_sec": 1873668
+        },
+        "ratio": 1.1380196491587624
+      },
+      {
+        "batch_size": 100000,
+        "inference": {
+          "max": 0.03919049957767129,
+          "median": 0.039125542156398296,
+          "min": 0.036737625021487474,
+          "per_sec": 2555875
+        },
+        "lightfm": {
+          "max": 0.04238400002941489,
+          "median": 0.04028087481856346,
+          "min": 0.03969908272847533,
+          "per_sec": 2482567
+        },
+        "ratio": 1.029529112406634
+      },
+      {
+        "batch_size": 1000000,
+        "inference": {
+          "max": 0.4461070830002427,
+          "median": 0.4440115410834551,
+          "min": 0.4103544158861041,
+          "per_sec": 2252193
+        },
+        "lightfm": {
+          "max": 0.4131812499836087,
+          "median": 0.4096606667153537,
+          "min": 0.40524050034582615,
+          "per_sec": 2441044
+        },
+        "ratio": 0.9226351511894091
+      }
+    ],
+    "ram": {
+      "caveats": [
+        "Measurement: RSS (psutil RSS on macOS \u2014 counts all resident pages)",
+        "Variant A (joblib + fork) creates anonymous CoW pages in each child; PSS is a lower bound on real footprint",
+        "Synthetic model \u2014 embedding values are random float32, not trained. Array layout is representative; memory behavior is identical to a trained model."
+      ],
+      "measurement": "rss",
+      "model_bytes": 670800560,
+      "n_workers": 4,
+      "platform": "darwin",
+      "sharing_ratio": 0.865996840442338,
+      "variant_a": {
+        "per_worker": [
+          280723456,
+          279789568,
+          280559616,
+          281591808
+        ],
+        "total": 1122664448
+      },
+      "variant_b": {
+        "per_worker": [
+          318291968,
+          319668224,
+          326991872,
+          331431936
+        ],
+        "total": 1296384000
+      }
+    },
+    "size": {
+      "joblib_bytes": 2012406723,
+      "reduction_pct": 66.66675019848857,
+      "reduction_ratio": 0.3333324980151142,
+      "safetensors_bytes": 670800560
+    }
+  },
+  "metadata": {
+    "config": {
+      "n_items": 1000000,
+      "n_users": 300000,
+      "no_components": 128
+    },
+    "host": {
+      "cpu_count": 8,
+      "platform": "darwin",
+      "python": "3.13.2"
+    },
+    "lightfm_version": "1.20",
+    "n_workers": 4,
+    "size": "medium",
+    "timestamp": "2026-04-23T14:55:30+00:00"
+  }
+}
