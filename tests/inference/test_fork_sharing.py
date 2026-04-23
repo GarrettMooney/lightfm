@@ -18,9 +18,11 @@ above the true shared floor. The parent's PSS is not summed here — it
 changes as children enter/exit, and we only need to prove worker-side
 sharing to make the d152 claim.
 
-On macOS PSS isn't available; fall back to a weaker per-worker RSS check —
-a catastrophic CoW regression would put each worker at ≈ model_size RSS,
-easily caught.
+On macOS PSS isn't available; fall back to a weaker per-worker RSS check
+that catches regressions pushing any single worker past 1.5× model_size.
+This misses the 1.0×-per-worker case (each child making a full anonymous
+copy of the same-sized buffer), so the Linux path is the authoritative
+sharing test — macOS runs here as a smoke guard only.
 """
 from __future__ import annotations
 

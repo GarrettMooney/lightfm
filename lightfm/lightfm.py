@@ -426,6 +426,29 @@ class LightFM(BaseEstimator):
 
         return sample_weight_data
 
+    def _inference_data(self):
+        from lightfm.inference._predict import _InferenceData
+        return _InferenceData(
+            item_embeddings=self.item_embeddings,
+            user_embeddings=self.user_embeddings,
+            item_biases=self.item_biases,
+            user_biases=self.user_biases,
+            no_components=self.no_components,
+            learning_schedule=self.learning_schedule,
+            item_embedding_gradients=self.item_embedding_gradients,
+            item_embedding_momentum=self.item_embedding_momentum,
+            item_bias_gradients=self.item_bias_gradients,
+            item_bias_momentum=self.item_bias_momentum,
+            user_embedding_gradients=self.user_embedding_gradients,
+            user_embedding_momentum=self.user_embedding_momentum,
+            user_bias_gradients=self.user_bias_gradients,
+            user_bias_momentum=self.user_bias_momentum,
+            learning_rate=self.learning_rate,
+            rho=self.rho,
+            epsilon=self.epsilon,
+            max_sampled=self.max_sampled,
+        )
+
     def _get_lightfm_data(self):
 
         lightfm_data = FastLightFM(
@@ -829,29 +852,9 @@ class LightFM(BaseEstimator):
         """
 
         self._check_initialized()
-        from lightfm.inference._predict import _InferenceData, _predict_impl
-        data = _InferenceData(
-            item_embeddings=self.item_embeddings,
-            user_embeddings=self.user_embeddings,
-            item_biases=self.item_biases,
-            user_biases=self.user_biases,
-            no_components=self.no_components,
-            learning_schedule=self.learning_schedule,
-            item_embedding_gradients=self.item_embedding_gradients,
-            item_embedding_momentum=self.item_embedding_momentum,
-            item_bias_gradients=self.item_bias_gradients,
-            item_bias_momentum=self.item_bias_momentum,
-            user_embedding_gradients=self.user_embedding_gradients,
-            user_embedding_momentum=self.user_embedding_momentum,
-            user_bias_gradients=self.user_bias_gradients,
-            user_bias_momentum=self.user_bias_momentum,
-            learning_rate=self.learning_rate,
-            rho=self.rho,
-            epsilon=self.epsilon,
-            max_sampled=self.max_sampled,
-        )
+        from lightfm.inference._predict import _predict_impl
         return _predict_impl(
-            data,
+            self._inference_data(),
             user_ids,
             item_ids,
             user_features=user_features,
@@ -925,29 +928,9 @@ class LightFM(BaseEstimator):
         """
 
         self._check_initialized()
-        from lightfm.inference._predict import _InferenceData, _predict_rank_impl
-        data = _InferenceData(
-            item_embeddings=self.item_embeddings,
-            user_embeddings=self.user_embeddings,
-            item_biases=self.item_biases,
-            user_biases=self.user_biases,
-            no_components=self.no_components,
-            learning_schedule=self.learning_schedule,
-            item_embedding_gradients=self.item_embedding_gradients,
-            item_embedding_momentum=self.item_embedding_momentum,
-            item_bias_gradients=self.item_bias_gradients,
-            item_bias_momentum=self.item_bias_momentum,
-            user_embedding_gradients=self.user_embedding_gradients,
-            user_embedding_momentum=self.user_embedding_momentum,
-            user_bias_gradients=self.user_bias_gradients,
-            user_bias_momentum=self.user_bias_momentum,
-            learning_rate=self.learning_rate,
-            rho=self.rho,
-            epsilon=self.epsilon,
-            max_sampled=self.max_sampled,
-        )
+        from lightfm.inference._predict import _predict_rank_impl
         return _predict_rank_impl(
-            data,
+            self._inference_data(),
             test_interactions,
             train_interactions=train_interactions,
             user_features=user_features,

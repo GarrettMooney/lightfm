@@ -42,12 +42,14 @@ def test_properties_match_saved(tmp_path):
 
 
 def test_load_mmap_flag_controls_base(tmp_path):
-    path, _ = _save_tiny(tmp_path)
+    path, arrays = _save_tiny(tmp_path)
     mmapped = InferenceLightFM.load(path, mmap=True)
     heap = InferenceLightFM.load(path, mmap=False)
-    assert mmapped.item_embeddings.base is not None  # file-backed
-    # heap-loaded arrays may or may not have base=None depending on safetensors;
-    # the load semantics test just verifies this doesn't raise.
+    # mmap'd arrays are views onto file-backed memory.
+    assert mmapped.item_embeddings.base is not None
+    # Both paths return the same logical data.
+    np.testing.assert_array_equal(mmapped.item_embeddings, arrays["item_embeddings"])
+    np.testing.assert_array_equal(heap.item_embeddings, arrays["item_embeddings"])
 
 
 def test_no_fit_attribute():
