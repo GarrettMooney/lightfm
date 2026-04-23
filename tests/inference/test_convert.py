@@ -59,3 +59,22 @@ def test_convert_artifact_is_smaller(tmp_path):
     dst = tmp_path / "model.safetensors"
     convert_joblib_to_inference(src, dst)
     assert dst.stat().st_size < src.stat().st_size
+
+
+import subprocess
+import sys
+
+
+def test_cli_runs(tmp_path):
+    src, _ = _train_and_dump(tmp_path)
+    dst = tmp_path / "cli_out.safetensors"
+    result = subprocess.run(
+        [sys.executable, "-m", "lightfm.inference.convert", str(src), str(dst)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert dst.exists()
+    # The CLI configures logging → info messages go to stderr.
+    assert "smaller" in result.stderr
