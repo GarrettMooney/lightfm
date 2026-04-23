@@ -828,59 +828,35 @@ class LightFM(BaseEstimator):
         """
 
         self._check_initialized()
-
-        if isinstance(user_ids, int):
-            user_ids = np.repeat(np.int32(user_ids), len(item_ids))
-
-        if isinstance(user_ids, (list, tuple)):
-            user_ids = np.array(user_ids, dtype=np.int32)
-
-        if isinstance(item_ids, (list, tuple)):
-            item_ids = np.array(item_ids, dtype=np.int32)
-
-        if len(user_ids) != len(item_ids):
-            raise ValueError(
-                f"Expected the number of user IDs ({len(user_ids)}) to equal the number"
-                f" of item IDs ({len(item_ids)})"
-            )
-
-        if user_ids.dtype != np.int32:
-            user_ids = user_ids.astype(np.int32)
-        if item_ids.dtype != np.int32:
-            item_ids = item_ids.astype(np.int32)
-
-        if num_threads < 1:
-            raise ValueError("Number of threads must be 1 or larger.")
-
-        if user_ids.min() < 0 or item_ids.min() < 0:
-            raise ValueError(
-                "User or item ids cannot be negative. "
-                "Check your inputs for negative numbers "
-                "or very large numbers that can overflow."
-            )
-
-        n_users = user_ids.max() + 1
-        n_items = item_ids.max() + 1
-
-        (user_features, item_features) = self._construct_feature_matrices(
-            n_users, n_items, user_features, item_features
+        from lightfm.inference._predict import _InferenceData, _predict_impl
+        data = _InferenceData(
+            item_embeddings=self.item_embeddings,
+            user_embeddings=self.user_embeddings,
+            item_biases=self.item_biases,
+            user_biases=self.user_biases,
+            no_components=self.no_components,
+            learning_schedule=self.learning_schedule,
+            item_embedding_gradients=self.item_embedding_gradients,
+            item_embedding_momentum=self.item_embedding_momentum,
+            item_bias_gradients=self.item_bias_gradients,
+            item_bias_momentum=self.item_bias_momentum,
+            user_embedding_gradients=self.user_embedding_gradients,
+            user_embedding_momentum=self.user_embedding_momentum,
+            user_bias_gradients=self.user_bias_gradients,
+            user_bias_momentum=self.user_bias_momentum,
+            learning_rate=self.learning_rate,
+            rho=self.rho,
+            epsilon=self.epsilon,
+            max_sampled=self.max_sampled,
         )
-
-        lightfm_data = self._get_lightfm_data()
-
-        predictions = np.empty(len(user_ids), dtype=np.float32)
-
-        predict_lightfm(
-            CSRMatrix(item_features),
-            CSRMatrix(user_features),
+        return _predict_impl(
+            data,
             user_ids,
             item_ids,
-            predictions,
-            lightfm_data,
-            num_threads,
+            user_features=user_features,
+            item_features=item_features,
+            num_threads=num_threads,
         )
-
-        return predictions
 
     def _check_test_train_intersections(self, test_mat, train_mat):
         if train_mat is not None:
@@ -948,56 +924,36 @@ class LightFM(BaseEstimator):
         """
 
         self._check_initialized()
-
-        if num_threads < 1:
-            raise ValueError("Number of threads must be 1 or larger.")
-
-        if check_intersections:
-            self._check_test_train_intersections(test_interactions, train_interactions)
-
-        n_users, n_items = test_interactions.shape
-
-        (user_features, item_features) = self._construct_feature_matrices(
-            n_users, n_items, user_features, item_features
+        from lightfm.inference._predict import _InferenceData, _predict_rank_impl
+        data = _InferenceData(
+            item_embeddings=self.item_embeddings,
+            user_embeddings=self.user_embeddings,
+            item_biases=self.item_biases,
+            user_biases=self.user_biases,
+            no_components=self.no_components,
+            learning_schedule=self.learning_schedule,
+            item_embedding_gradients=self.item_embedding_gradients,
+            item_embedding_momentum=self.item_embedding_momentum,
+            item_bias_gradients=self.item_bias_gradients,
+            item_bias_momentum=self.item_bias_momentum,
+            user_embedding_gradients=self.user_embedding_gradients,
+            user_embedding_momentum=self.user_embedding_momentum,
+            user_bias_gradients=self.user_bias_gradients,
+            user_bias_momentum=self.user_bias_momentum,
+            learning_rate=self.learning_rate,
+            rho=self.rho,
+            epsilon=self.epsilon,
+            max_sampled=self.max_sampled,
         )
-
-        if not item_features.shape[1] == self.item_embeddings.shape[0]:
-            raise ValueError("Incorrect number of features in item_features")
-
-        if not user_features.shape[1] == self.user_embeddings.shape[0]:
-            raise ValueError("Incorrect number of features in user_features")
-
-        test_interactions = test_interactions.tocsr()
-        test_interactions = self._to_cython_dtype(test_interactions)
-
-        if train_interactions is None:
-            train_interactions = sp.csr_matrix((n_users, n_items), dtype=CYTHON_DTYPE)
-        else:
-            train_interactions = train_interactions.tocsr()
-            train_interactions = self._to_cython_dtype(train_interactions)
-
-        ranks = sp.csr_matrix(
-            (
-                np.zeros_like(test_interactions.data),
-                test_interactions.indices,
-                test_interactions.indptr,
-            ),
-            shape=test_interactions.shape,
+        return _predict_rank_impl(
+            data,
+            test_interactions,
+            train_interactions=train_interactions,
+            user_features=user_features,
+            item_features=item_features,
+            num_threads=num_threads,
+            check_intersections=check_intersections,
         )
-
-        lightfm_data = self._get_lightfm_data()
-
-        predict_ranks(
-            CSRMatrix(item_features),
-            CSRMatrix(user_features),
-            CSRMatrix(test_interactions),
-            CSRMatrix(train_interactions),
-            ranks.data,
-            lightfm_data,
-            num_threads,
-        )
-
-        return ranks
 
     def get_item_representations(
         self, features: sp.csr_matrix | None = None
