@@ -48,6 +48,54 @@ model.fit(data['train'], epochs=30, num_threads=2)
 test_precision = precision_at_k(model, data['test'], k=5).mean()
 ```
 
+## Deploying on heterogeneous CPU fleets
+
+If you deploy LightFM in containers that may land on heterogeneous CPU
+hardware (Modal, Kubernetes, autoscaled cloud workers), you may see
+intermittent `SIGILL` (`Illegal instruction` / exit code 132) crashes
+during `LightFM.predict()`. The crash is **not** in LightFM itself: it
+originates in the OpenBLAS bundled inside the NumPy wheel
+(`libscipy_openblas64_*.so`), whose runtime CPU dispatcher can select an
+AVX-512 (Skylake-X) DGEMM kernel on a CPU that does not actually execute
+AVX-512.
+
+The crash signature on a controlled AVX2-only host:
+
+```
+Thread 1 "python" received signal SIGILL, Illegal instruction.
+0x... in dgemm_small_kernel_b0_nn_SKYLAKEX ()
+   from .../numpy.libs/libscipy_openblas64_*.so
+=> vbroadcastsd %xmm0,%zmm25
+```
+
+Mitigations, in order of preference:
+
+1. Pin the OpenBLAS kernel to a baseline that every runtime CPU
+   supports:
+   ```
+   export OPENBLAS_CORETYPE=HASWELL
+   ```
+   `HASWELL` requires AVX2 + FMA, which every common cloud x86_64
+   fleet from the last decade has. Use `SANDYBRIDGE` for older fleets,
+   `PRESCOTT` for SSE3 only.
+
+2. Reduce BLAS thread count, which on many fleets steers OpenBLAS
+   away from the problematic small-matrix AVX-512 path:
+   ```
+   export OPENBLAS_NUM_THREADS=1
+   ```
+
+3. Install `faiss-cpu` in the same image (no need to import it).
+   Its bundled OpenBLAS resolves before NumPy's, sidestepping the
+   dispatcher. Empirical mitigation; see
+   [`docs/issue-5-sigill-forensics.md`](docs/issue-5-sigill-forensics.md)
+   for the investigation.
+
+LightFM's own compile flags (`-march=native`, `-ffast-math`) are not
+involved — the Cython hot path is scalar C and `objdump` confirms no
+wide-vector instructions land in `_lightfm_fast*.so` regardless of
+flag choice. Setting `LIGHTFM_NO_CFLAGS=1` does not avoid this SIGILL.
+
 ## Articles and tutorials on using LightFM
 1. [Learning to Rank Sketchfab Models with LightFM](http://blog.ethanrosenthal.com/2016/11/07/implicit-mf-part-2/)
 2. [Metadata Embeddings for User and Item Cold-start Recommendations](http://building-babylon.net/2016/01/26/metadata-embeddings-for-user-and-item-cold-start-recommendations/)

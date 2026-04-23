@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Documentation
+
+- Documented intermittent `SIGILL` (exit 132) seen on heterogeneous CPU
+  fleets (Modal, K8s) and the `OPENBLAS_CORETYPE` workaround. Root cause
+  is in NumPy's bundled OpenBLAS dispatcher, not LightFM. See
+  [`docs/issue-5-sigill-forensics.md`](docs/issue-5-sigill-forensics.md)
+  and [issue #5](https://github.com/GarrettMooney/lightfm/issues/5).
+
 ## [1.17][2023-03-19]
 
 ### Fixed
