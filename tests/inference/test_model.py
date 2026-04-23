@@ -139,3 +139,24 @@ def test_predict_rank_bit_identical_to_lightfm(tmp_path):
     expected = model.predict_rank(test_interactions)
     actual = inf.predict_rank(test_interactions)
     np.testing.assert_array_equal(actual.toarray(), expected.toarray())
+
+
+def test_save_for_inference_then_load(tmp_path):
+    model, _ = _train_tiny_model(loss="logistic")
+    path = tmp_path / "saved.safetensors"
+    model.save_for_inference(path)
+
+    inf = InferenceLightFM.load(path, mmap=False)
+    assert inf.no_components == model.no_components
+    assert inf.loss == "logistic"
+
+    rng = np.random.default_rng(42)
+    user_ids = rng.integers(0, 30, size=50, dtype=np.int32)
+    item_ids = rng.integers(0, 50, size=50, dtype=np.int32)
+    np.testing.assert_array_equal(inf.predict(user_ids, item_ids), model.predict(user_ids, item_ids))
+
+
+def test_save_for_inference_unfitted_raises():
+    model = LightFM()
+    with pytest.raises(ValueError, match="fit the model"):
+        model.save_for_inference("/tmp/should-not-be-written.safetensors")

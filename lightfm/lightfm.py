@@ -1,6 +1,7 @@
 # coding=utf-8
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
@@ -1016,6 +1017,39 @@ class LightFM(BaseEstimator):
         features = sp.csr_matrix(features, dtype=CYTHON_DTYPE)
 
         return features * self.user_biases, features * self.user_embeddings
+
+    def save_for_inference(self, path: str | Path) -> None:
+        """Save a slim inference-only artifact.
+
+        Writes a single safetensors file containing only the arrays needed
+        for prediction (`item_embeddings`, `user_embeddings`, `item_biases`,
+        `user_biases`), along with minimal metadata. Training-only optimizer
+        state (gradients, momentum) is omitted — typically halves artifact
+        size vs. `joblib.dump(model)`.
+
+        Load the result with `lightfm.inference.InferenceLightFM.load(path)`.
+
+        Parameters
+        ----------
+        path : str or Path
+            Destination path for the safetensors file.
+        """
+        self._check_initialized()
+        from lightfm.inference import _artifact
+        _artifact.save(
+            path,
+            arrays={
+                "item_embeddings": self.item_embeddings,
+                "user_embeddings": self.user_embeddings,
+                "item_biases": self.item_biases,
+                "user_biases": self.user_biases,
+            },
+            metadata={
+                "no_components": self.no_components,
+                "loss": self.loss,
+                "learning_schedule": self.learning_schedule,
+            },
+        )
 
     def get_params(self, deep: bool = True) -> dict[str, Any]:
         """
