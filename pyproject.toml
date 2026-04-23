@@ -33,7 +33,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "black", "flake8", "pre-commit"]
+dev = ["pytest", "black", "flake8", "pre-commit", "psutil"]
 docs = ["sphinx", "sphinx_rtd_theme"]
 
 [project.urls]
