@@ -11,6 +11,7 @@ from lightfm.inference._predict import (
     _InferenceData,
     _predict_impl,
     _predict_rank_impl,
+    _predict_top_k_impl,
 )
 
 
@@ -98,6 +99,25 @@ class InferenceLightFM:
             user_features=user_features,
             item_features=item_features,
             num_threads=num_threads,
+        )
+
+    def predict_top_k(
+        self,
+        user_ids,
+        k: int = 100,
+        item_ids=None,
+        n_items: int | None = None,
+        user_features: sp.csr_matrix | None = None,
+        item_features: sp.csr_matrix | None = None,
+    ) -> tuple[NDArray[np.int32], NDArray[np.float32]]:
+        return _predict_top_k_impl(
+            self._inference_data(),
+            user_ids,
+            k=k,
+            item_ids=item_ids,
+            n_items=n_items,
+            user_features=user_features,
+            item_features=item_features,
         )
 
     def predict_rank(

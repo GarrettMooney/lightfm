@@ -224,6 +224,135 @@ def _check_test_train_intersections(test_mat, train_mat) -> None:
             )
 
 
+def _predict_top_k_impl(
+    data: _InferenceData,
+    user_ids: NDArray[np.int32] | list | tuple,
+    k: int = 100,
+    item_ids: NDArray[np.int32] | list | tuple | None = None,
+    n_items: int | None = None,
+    user_features: sp.csr_matrix | None = None,
+    item_features: sp.csr_matrix | None = None,
+) -> tuple[NDArray[np.int32], NDArray[np.float32]]:
+    """Pure-numpy BLAS top-k. Returns (top_k_indices, top_k_scores).
+
+    Indices are positions in the candidate set: into ``item_ids`` if provided,
+    else item rows ``0..n_items-1``. Both outputs have shape ``(len(user_ids), k)``
+    sorted descending by score.
+
+    When ``user_features``/``item_features`` are None this matches lightfm's
+    no-features predict semantics: representations are direct embedding-row
+    lookups (the "identity-feature" contribution only). Models trained WITH
+    features will silently drop the categorical-feature contribution under
+    this path — same behavior as ``LightFM.predict(user_ids, item_ids)`` with
+    ``user_features=None``.
+    """
+    if k < 1:
+        raise ValueError("k must be >= 1")
+    if item_ids is not None and n_items is not None:
+        raise ValueError("Pass either item_ids or n_items, not both")
+
+    user_ids = np.asarray(user_ids, dtype=np.int32)
+    if user_ids.ndim != 1:
+        raise ValueError("user_ids must be 1-D")
+
+    user_repr, user_repr_bias = _compute_user_representations(
+        data, user_ids, user_features
+    )
+    item_repr, item_repr_bias, candidate_n = _compute_item_representations(
+        data, item_ids, n_items, item_features
+    )
+
+    k_eff = min(k, candidate_n)
+
+    # Single GEMM: (n_batch, d) @ (d, n_candidates) → (n_batch, n_candidates)
+    scores = user_repr @ item_repr.T
+    scores += user_repr_bias[:, None]
+    scores += item_repr_bias[None, :]
+
+    # argpartition gets the top-k unsorted; argsort sorts just the k slice.
+    if k_eff == candidate_n:
+        topk_unsorted = np.broadcast_to(
+            np.arange(candidate_n, dtype=np.int32), scores.shape
+        ).copy()
+    else:
+        topk_unsorted = np.argpartition(-scores, k_eff - 1, axis=1)[:, :k_eff]
+    topk_scores = np.take_along_axis(scores, topk_unsorted, axis=1)
+    order = np.argsort(-topk_scores, axis=1)
+    topk_sorted = np.take_along_axis(topk_unsorted, order, axis=1).astype(
+        np.int32, copy=False
+    )
+    topk_scores_sorted = np.take_along_axis(topk_scores, order, axis=1)
+
+    if item_ids is not None:
+        ids = np.asarray(item_ids, dtype=np.int32)
+        return ids[topk_sorted], topk_scores_sorted
+    return topk_sorted, topk_scores_sorted
+
+
+def _compute_user_representations(
+    data: _InferenceData,
+    user_ids: NDArray[np.int32],
+    user_features: sp.csr_matrix | None,
+) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
+    """Returns (user_repr, user_repr_bias) for the given user_ids batch.
+
+    No features → direct embedding-row lookup.
+    With features → user_features[user_ids] @ user_embeddings, plus bias contraction.
+    """
+    if user_features is None:
+        return (
+            data.user_embeddings[user_ids],
+            data.user_biases[user_ids],
+        )
+    feats = user_features.tocsr()[user_ids]
+    if feats.dtype != CYTHON_DTYPE:
+        feats = feats.astype(CYTHON_DTYPE)
+    repr_ = feats @ data.user_embeddings
+    bias = np.asarray(feats @ data.user_biases).ravel()
+    return repr_, bias
+
+
+def _compute_item_representations(
+    data: _InferenceData,
+    item_ids: NDArray[np.int32] | list | tuple | None,
+    n_items: int | None,
+    item_features: sp.csr_matrix | None,
+) -> tuple[NDArray[np.float32], NDArray[np.float32], int]:
+    """Returns (item_repr, item_repr_bias, n_candidates).
+
+    Candidate set is determined by item_ids (subset) or n_items (prefix) or
+    full embedding rows (default). Features path multiplies through the sparse
+    feature matrix the same way as the user side.
+    """
+    if item_features is None:
+        if item_ids is not None:
+            ids = np.asarray(item_ids, dtype=np.int32)
+            return data.item_embeddings[ids], data.item_biases[ids], ids.shape[0]
+        if n_items is not None:
+            return (
+                data.item_embeddings[:n_items],
+                data.item_biases[:n_items],
+                n_items,
+            )
+        return (
+            data.item_embeddings,
+            data.item_biases,
+            data.item_embeddings.shape[0],
+        )
+
+    feats = item_features.tocsr()
+    if feats.dtype != CYTHON_DTYPE:
+        feats = feats.astype(CYTHON_DTYPE)
+    if item_ids is not None:
+        ids = np.asarray(item_ids, dtype=np.int32)
+        feats = feats[ids]
+    elif n_items is not None:
+        feats = feats[:n_items]
+    repr_ = feats @ data.item_embeddings
+    bias = np.asarray(feats @ data.item_biases).ravel()
+    return repr_, bias, feats.shape[0]
+
+
 def _predict_rank_impl(
     data: _InferenceData,
     test_interactions: sp.csr_matrix,
