@@ -1,6 +1,7 @@
 # coding=utf-8
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
@@ -425,6 +426,29 @@ class LightFM(BaseEstimator):
 
         return sample_weight_data
 
+    def _inference_data(self):
+        from lightfm.inference._predict import _InferenceData
+        return _InferenceData(
+            item_embeddings=self.item_embeddings,
+            user_embeddings=self.user_embeddings,
+            item_biases=self.item_biases,
+            user_biases=self.user_biases,
+            no_components=self.no_components,
+            learning_schedule=self.learning_schedule,
+            item_embedding_gradients=self.item_embedding_gradients,
+            item_embedding_momentum=self.item_embedding_momentum,
+            item_bias_gradients=self.item_bias_gradients,
+            item_bias_momentum=self.item_bias_momentum,
+            user_embedding_gradients=self.user_embedding_gradients,
+            user_embedding_momentum=self.user_embedding_momentum,
+            user_bias_gradients=self.user_bias_gradients,
+            user_bias_momentum=self.user_bias_momentum,
+            learning_rate=self.learning_rate,
+            rho=self.rho,
+            epsilon=self.epsilon,
+            max_sampled=self.max_sampled,
+        )
+
     def _get_lightfm_data(self):
 
         lightfm_data = FastLightFM(
@@ -828,59 +852,45 @@ class LightFM(BaseEstimator):
         """
 
         self._check_initialized()
-
-        if isinstance(user_ids, int):
-            user_ids = np.repeat(np.int32(user_ids), len(item_ids))
-
-        if isinstance(user_ids, (list, tuple)):
-            user_ids = np.array(user_ids, dtype=np.int32)
-
-        if isinstance(item_ids, (list, tuple)):
-            item_ids = np.array(item_ids, dtype=np.int32)
-
-        if len(user_ids) != len(item_ids):
-            raise ValueError(
-                f"Expected the number of user IDs ({len(user_ids)}) to equal the number"
-                f" of item IDs ({len(item_ids)})"
-            )
-
-        if user_ids.dtype != np.int32:
-            user_ids = user_ids.astype(np.int32)
-        if item_ids.dtype != np.int32:
-            item_ids = item_ids.astype(np.int32)
-
-        if num_threads < 1:
-            raise ValueError("Number of threads must be 1 or larger.")
-
-        if user_ids.min() < 0 or item_ids.min() < 0:
-            raise ValueError(
-                "User or item ids cannot be negative. "
-                "Check your inputs for negative numbers "
-                "or very large numbers that can overflow."
-            )
-
-        n_users = user_ids.max() + 1
-        n_items = item_ids.max() + 1
-
-        (user_features, item_features) = self._construct_feature_matrices(
-            n_users, n_items, user_features, item_features
-        )
-
-        lightfm_data = self._get_lightfm_data()
-
-        predictions = np.empty(len(user_ids), dtype=np.float32)
-
-        predict_lightfm(
-            CSRMatrix(item_features),
-            CSRMatrix(user_features),
+        from lightfm.inference._predict import _predict_impl
+        return _predict_impl(
+            self._inference_data(),
             user_ids,
             item_ids,
-            predictions,
-            lightfm_data,
-            num_threads,
+            user_features=user_features,
+            item_features=item_features,
+            num_threads=num_threads,
         )
 
-        return predictions
+    def predict_top_k(
+        self,
+        user_ids,
+        k: int = 100,
+        item_ids=None,
+        n_items: int | None = None,
+        user_features: sp.csr_matrix | None = None,
+        item_features: sp.csr_matrix | None = None,
+    ) -> tuple[NDArray[np.int32], NDArray[np.float32]]:
+        """Top-k items per user via dense BLAS.
+
+        Caches no state — pass the same model and let numpy/MKL handle the
+        GEMM. Returns (top_k_indices, top_k_scores), both shape ``(len(user_ids), k)``,
+        sorted descending by score. With no features, indices are direct item
+        rows; with feature matrices, computes representations the same way as
+        ``predict()`` (see ``_predict_top_k_impl`` docstring for the
+        no-features-but-trained-with-features caveat).
+        """
+        self._check_initialized()
+        from lightfm.inference._predict import _predict_top_k_impl
+        return _predict_top_k_impl(
+            self._inference_data(),
+            user_ids,
+            k=k,
+            item_ids=item_ids,
+            n_items=n_items,
+            user_features=user_features,
+            item_features=item_features,
+        )
 
     def _check_test_train_intersections(self, test_mat, train_mat):
         if train_mat is not None:
@@ -948,56 +958,16 @@ class LightFM(BaseEstimator):
         """
 
         self._check_initialized()
-
-        if num_threads < 1:
-            raise ValueError("Number of threads must be 1 or larger.")
-
-        if check_intersections:
-            self._check_test_train_intersections(test_interactions, train_interactions)
-
-        n_users, n_items = test_interactions.shape
-
-        (user_features, item_features) = self._construct_feature_matrices(
-            n_users, n_items, user_features, item_features
+        from lightfm.inference._predict import _predict_rank_impl
+        return _predict_rank_impl(
+            self._inference_data(),
+            test_interactions,
+            train_interactions=train_interactions,
+            user_features=user_features,
+            item_features=item_features,
+            num_threads=num_threads,
+            check_intersections=check_intersections,
         )
-
-        if not item_features.shape[1] == self.item_embeddings.shape[0]:
-            raise ValueError("Incorrect number of features in item_features")
-
-        if not user_features.shape[1] == self.user_embeddings.shape[0]:
-            raise ValueError("Incorrect number of features in user_features")
-
-        test_interactions = test_interactions.tocsr()
-        test_interactions = self._to_cython_dtype(test_interactions)
-
-        if train_interactions is None:
-            train_interactions = sp.csr_matrix((n_users, n_items), dtype=CYTHON_DTYPE)
-        else:
-            train_interactions = train_interactions.tocsr()
-            train_interactions = self._to_cython_dtype(train_interactions)
-
-        ranks = sp.csr_matrix(
-            (
-                np.zeros_like(test_interactions.data),
-                test_interactions.indices,
-                test_interactions.indptr,
-            ),
-            shape=test_interactions.shape,
-        )
-
-        lightfm_data = self._get_lightfm_data()
-
-        predict_ranks(
-            CSRMatrix(item_features),
-            CSRMatrix(user_features),
-            CSRMatrix(test_interactions),
-            CSRMatrix(train_interactions),
-            ranks.data,
-            lightfm_data,
-            num_threads,
-        )
-
-        return ranks
 
     def get_item_representations(
         self, features: sp.csr_matrix | None = None
@@ -1060,6 +1030,39 @@ class LightFM(BaseEstimator):
         features = sp.csr_matrix(features, dtype=CYTHON_DTYPE)
 
         return features * self.user_biases, features * self.user_embeddings
+
+    def save_for_inference(self, path: str | Path) -> None:
+        """Save a slim inference-only artifact.
+
+        Writes a single safetensors file containing only the arrays needed
+        for prediction (`item_embeddings`, `user_embeddings`, `item_biases`,
+        `user_biases`), along with minimal metadata. Training-only optimizer
+        state (gradients, momentum) is omitted — typically halves artifact
+        size vs. `joblib.dump(model)`.
+
+        Load the result with `lightfm.inference.InferenceLightFM.load(path)`.
+
+        Parameters
+        ----------
+        path : str or Path
+            Destination path for the safetensors file.
+        """
+        self._check_initialized()
+        from lightfm.inference import _artifact
+        _artifact.save(
+            path,
+            arrays={
+                "item_embeddings": self.item_embeddings,
+                "user_embeddings": self.user_embeddings,
+                "item_biases": self.item_biases,
+                "user_biases": self.user_biases,
+            },
+            metadata={
+                "no_components": self.no_components,
+                "loss": self.loss,
+                "learning_schedule": self.learning_schedule,
+            },
+        )
 
     def get_params(self, deep: bool = True) -> dict[str, Any]:
         """

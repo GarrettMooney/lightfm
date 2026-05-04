@@ -29,10 +29,11 @@ dependencies = [
     "scipy>=0.17.0",
     "requests",
     "scikit-learn",
+    "safetensors>=0.4",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "black", "flake8", "pre-commit"]
+dev = ["pytest", "black", "flake8", "pre-commit", "psutil"]
 docs = ["sphinx", "sphinx_rtd_theme"]
 
 [project.urls]
@@ -41,10 +42,15 @@ Documentation = "https://making.lyst.com/lightfm/docs/home.html"
 Repository = "https://github.com/lyst/lightfm"
 
 [tool.setuptools]
-packages = ["lightfm", "lightfm.datasets"]
+packages = ["lightfm", "lightfm.datasets", "lightfm.inference"]
 
 [tool.setuptools.package-data]
 lightfm = ["*.c"]
 
 [tool.setuptools.dynamic]
 version = {attr = "lightfm.version.__version__"}
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
